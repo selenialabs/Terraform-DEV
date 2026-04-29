@@ -1,0 +1,47 @@
+# IPs públicas de las EC2
+output "backend_public_ip" {
+  description = "IP elástica del backend"
+  value       = aws_eip.backend.public_ip
+}
+
+output "pipelines_public_ip" {
+  description = "IP elástica de pipelines"
+  value       = aws_eip.pipelines.public_ip
+}
+
+output "frontend_public_ip" {
+  description = "IP elástica del frontend"
+  value       = aws_eip.frontend.public_ip
+}
+
+# Endpoint de la base de datos
+output "rds_endpoint" {
+  description = "Endpoint de la RDS"
+  value       = aws_db_instance.main.endpoint
+}
+
+output "rds_address" {
+  description = "Address de la RDS (sin puerto)"
+  value       = aws_db_instance.main.address
+}
+
+# Bucket S3
+output "bucket_name" {
+  description = "Nombre del bucket S3"
+  value       = aws_s3_bucket.main.bucket
+}
+
+# Comandos SSH listos para copiar y pegar
+output "ssh_backend" {
+  description = "Comando SSH al backend"
+  value       = "ssh -i keys/backend-key.pem ubuntu@${aws_eip.backend.public_ip}"
+}
+
+output "ssh_pipelines" {
+  description = "Comando SSH a pipelines"
+  value       = "ssh -i keys/pipelines-key.pem ubuntu@${aws_eip.pipelines.public_ip}"
+}
+output "ssh_frontend" {
+  description = "Comando SSH al frontend"
+  value       = "ssh -i keys/frontend-key.pem ec2-user@${aws_eip.frontend.public_ip}"
+}

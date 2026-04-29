@@ -1,0 +1,20 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+*.tfplan
+
+# Variables (contienen contraseñas)
+terraform.tfvars
+*.auto.tfvars
+
+# Claves SSH privadas
+keys/
+*.pem
+
+# Logs
+crash.log
+crash.*.log
+
+# Otros
+.DS_Store

@@ -20,7 +20,7 @@ resource "aws_iam_role" "ec2_s3_role" {
 
 # Política con permisos sobre el bucket S3
 resource "aws_iam_role_policy" "ec2_s3_policy" {
-  name = "${var.project_name}-${var.environment}-ec2-s3-policy"
+  name = "${var.project_name}-${var.environment}-ec2-policy"
   role = aws_iam_role.ec2_s3_role.id
 
   policy = jsonencode({
@@ -38,6 +38,16 @@ resource "aws_iam_role_policy" "ec2_s3_policy" {
           aws_s3_bucket.main.arn,
           "${aws_s3_bucket.main.arn}/*"
         ]
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "ecr:GetAuthorizationToken",
+          "ecr:BatchCheckLayerAvailability",
+          "ecr:GetDownloadUrlForLayer",
+          "ecr:BatchGetImage"
+        ]
+        Resource = "*"
       }
     ]
   })

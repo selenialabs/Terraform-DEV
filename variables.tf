@@ -37,3 +37,9 @@ variable "bucket_name" {
   description = "Nombre del bucket S3 (debe ser único globalmente)"
   type        = string
 }
+
+variable "openai_api_key" {
+  description = "API key de OpenAI"
+  type        = string
+  sensitive   = true
+}

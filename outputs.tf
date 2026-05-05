@@ -45,3 +45,19 @@ output "ssh_frontend" {
   description = "Comando SSH al frontend"
   value       = "ssh -i keys/frontend-key.pem ec2-user@${aws_eip.frontend.public_ip}"
 }
+
+# URLs de los repositorios ECR
+output "ecr_backend_url" {
+  value       = aws_ecr_repository.backend.repository_url
+  description = "URL del repo ECR del backend"
+}
+
+output "ecr_pipelines_url" {
+  value       = aws_ecr_repository.pipelines.repository_url
+  description = "URL del repo ECR de pipelines"
+}
+
+output "ecr_frontend_url" {
+  value       = aws_ecr_repository.frontend.repository_url
+  description = "URL del repo ECR del frontend"
+}

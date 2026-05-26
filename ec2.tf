@@ -80,7 +80,7 @@ resource "aws_instance" "backend" {
   vpc_security_group_ids = [aws_security_group.backend.id]
   iam_instance_profile   = aws_iam_instance_profile.ec2_s3_profile.name
 
-user_data = <<EOF
+  user_data = <<EOF
 #!/bin/bash
 set -e
 

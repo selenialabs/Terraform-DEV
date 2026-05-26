@@ -65,16 +65,11 @@ resource "aws_security_group" "pipelines_tasks" {
   }
 }
 
-# Ingress en SG de RDS desde el SG de tasks (rule standalone para no tocar
-# security_groups.tf todavía — se consolidará en Fase 5).
-resource "aws_vpc_security_group_ingress_rule" "rds_from_pipelines_tasks" {
-  security_group_id            = aws_security_group.rds.id
-  description                  = "PostgreSQL desde tasks Fargate de pipelines"
-  from_port                    = 5432
-  to_port                      = 5432
-  ip_protocol                  = "tcp"
-  referenced_security_group_id = aws_security_group.pipelines_tasks.id
-}
+# Nota: el ingress de 5432 desde aws_security_group.pipelines_tasks al SG de
+# RDS se define como bloque inline en security_groups.tf:aws_security_group.rds,
+# no acá. Mezclar bloques inline con aws_vpc_security_group_ingress_rule en
+# un mismo SG produce drift perpetuo (el provider los considera mutuamente
+# excluyentes).
 
 # ----------------------------------------------------------------------------
 # 4. IAM task execution role

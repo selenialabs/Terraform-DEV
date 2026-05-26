@@ -29,9 +29,9 @@ resource "aws_db_instance" "main" {
   vpc_security_group_ids = [aws_security_group.rds.id]
   publicly_accessible    = true
 
-  skip_final_snapshot       = true
-  deletion_protection       = false
-  delete_automated_backups  = true
+  skip_final_snapshot      = true
+  deletion_protection      = false
+  delete_automated_backups = true
 
   tags = {
     Name = "${var.project_name}-${var.environment}-db"

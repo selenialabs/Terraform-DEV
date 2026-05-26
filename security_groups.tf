@@ -12,13 +12,13 @@ resource "aws_security_group" "backend" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-ingress {
-  description = "SSH desde cualquier IP"
-  from_port   = 22
-  to_port     = 22
-  protocol    = "tcp"
-  cidr_blocks = ["0.0.0.0/0"]
-}
+  ingress {
+    description = "SSH desde cualquier IP"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 
   ingress {
     description = "App puerto 3000"
@@ -69,13 +69,13 @@ resource "aws_security_group" "pipelines" {
     protocol    = "tcp"
     cidr_blocks = ["0.0.0.0/0"]
   }
-ingress {
-  description = "SSH desde cualquier IP"
-  from_port   = 22
-  to_port     = 22
-  protocol    = "tcp"
-  cidr_blocks = ["0.0.0.0/0"]
-}
+  ingress {
+    description = "SSH desde cualquier IP"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
   ingress {
     description = "Dagster puerto 3000"
     from_port   = 3000
@@ -111,12 +111,12 @@ resource "aws_security_group" "frontend" {
   }
 
   ingress {
-  description = "Frontend puerto 8080"
-  from_port   = 8080
-  to_port     = 8080
-  protocol    = "tcp"
-  cidr_blocks = ["0.0.0.0/0"]
-}
+    description = "Frontend puerto 8080"
+    from_port   = 8080
+    to_port     = 8080
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 
   ingress {
     description = "HTTPS"
@@ -126,13 +126,13 @@ resource "aws_security_group" "frontend" {
     cidr_blocks = ["0.0.0.0/0"]
   }
 
-ingress {
-  description = "SSH desde cualquier IP"
-  from_port   = 22
-  to_port     = 22
-  protocol    = "tcp"
-  cidr_blocks = ["0.0.0.0/0"]
-}
+  ingress {
+    description = "SSH desde cualquier IP"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
 
   ingress {
     description = "App puerto 3000"
@@ -169,22 +169,40 @@ resource "aws_security_group" "rds" {
     security_groups = [aws_security_group.backend.id]
   }
 
-  # Acceso desde pipelines
+  # Acceso desde pipelines (EC2 vieja con Dagster — se elimina en Fase 5)
   ingress {
-    description     = "PostgreSQL desde pipelines"
+    description     = "PostgreSQL desde pipelines (EC2 Dagster)"
     from_port       = 5432
     to_port         = 5432
     protocol        = "tcp"
     security_groups = [aws_security_group.pipelines.id]
   }
 
-ingress {
-  description = "SSH desde cualquier IP"
-  from_port   = 22
-  to_port     = 22
-  protocol    = "tcp"
-  cidr_blocks = ["0.0.0.0/0"]
-}
+  # Acceso desde tasks Fargate (Fase 2 de la migracion event-driven)
+  ingress {
+    description     = "PostgreSQL desde tasks Fargate de pipelines"
+    from_port       = 5432
+    to_port         = 5432
+    protocol        = "tcp"
+    security_groups = [aws_security_group.pipelines_tasks.id]
+  }
+
+  # Acceso manual desde IP de un dev (agregada inicialmente vía consola)
+  ingress {
+    description = "PostgreSQL desde IP de dev (acceso manual desde local)"
+    from_port   = 5432
+    to_port     = 5432
+    protocol    = "tcp"
+    cidr_blocks = ["181.170.113.185/32"]
+  }
+
+  ingress {
+    description = "SSH desde cualquier IP"
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
   egress {
     from_port   = 0
     to_port     = 0

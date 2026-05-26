@@ -80,40 +80,64 @@ resource "aws_instance" "backend" {
   vpc_security_group_ids = [aws_security_group.backend.id]
   iam_instance_profile   = aws_iam_instance_profile.ec2_s3_profile.name
 
-  user_data = <<-EOF
-    #!/bin/bash
-    set -e
-    
-    # Instalar Docker
-    apt-get update -y
-    apt-get install -y docker.io awscli
-    systemctl enable docker
-    systemctl start docker
-    
-    # Esperar a que docker esté listo
-    sleep 5
-    
-    # Login a ECR
-    aws ecr get-login-password --region ${var.region} | docker login --username AWS --password-stdin ${aws_ecr_repository.backend.repository_url}
-    
-    # Pull de la imagen
-    docker pull ${aws_ecr_repository.backend.repository_url}:latest
-    
-    # Levantar el container con las variables de entorno
-    docker run -d \
-      --name backend \
-      --restart always \
-      -p 8000:8000 \
-      -e S3_BUCKET_NAME=${aws_s3_bucket.main.bucket} \
-      -e AWS_DEFAULT_REGION=${var.region} \
-      -e DB_USER=${var.db_username} \
-      -e DB_PASSWORD=${var.db_password} \
-      -e DB_HOST=${aws_db_instance.main.address} \
-      -e DB_PORT=5432 \
-      -e DB_NAME=selenia \
-      -e OPENAI_API_KEY=${var.openai_api_key} \
-      ${aws_ecr_repository.backend.repository_url}:latest
-  EOF
+user_data = <<EOF
+#!/bin/bash
+set -e
+
+apt-get update -y
+apt-get install -y ca-certificates curl awscli cron
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg -o /etc/apt/keyrings/docker.asc
+chmod a+r /etc/apt/keyrings/docker.asc
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/docker.asc] https://download.docker.com/linux/ubuntu jammy stable" | tee /etc/apt/sources.list.d/docker.list > /dev/null
+apt-get update -y
+apt-get install -y docker-ce docker-ce-cli containerd.io
+systemctl enable docker
+systemctl start docker
+sleep 5
+
+aws ecr get-login-password --region ${var.region} | docker login --username AWS --password-stdin ${aws_ecr_repository.backend.repository_url}
+
+docker pull ${aws_ecr_repository.backend.repository_url}:latest
+
+docker run -d \
+  --name backend \
+  --restart always \
+  -p 8000:8000 \
+  -e S3_BUCKET_NAME=${aws_s3_bucket.main.bucket} \
+  -e AWS_DEFAULT_REGION=${var.region} \
+  -e DB_USER=${var.db_username} \
+  -e DB_PASSWORD=${var.db_password} \
+  -e DB_HOST=${aws_db_instance.main.address} \
+  -e DB_PORT=5432 \
+  -e DB_NAME=selenia \
+  -e OPENAI_API_KEY=${var.openai_api_key} \
+  ${aws_ecr_repository.backend.repository_url}:latest
+
+cat > /usr/local/bin/ecr-login.sh <<ECREOF
+#!/bin/bash
+aws ecr get-login-password --region ${var.region} | docker login --username AWS --password-stdin ${aws_ecr_repository.backend.repository_url}
+ECREOF
+chmod +x /usr/local/bin/ecr-login.sh
+
+systemctl enable cron
+systemctl start cron
+
+echo "0 */6 * * * root /usr/local/bin/ecr-login.sh" >> /etc/crontab
+
+docker run -d \
+  --name watchtower \
+  --restart always \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v /root/.docker:/root/.docker \
+  -e DOCKER_CONFIG=/root/.docker \
+  -e WATCHTOWER_POLL_INTERVAL=300 \
+  -e WATCHTOWER_CLEANUP=true \
+  -e WATCHTOWER_INCLUDE_STOPPED=false \
+  -e DOCKER_API_VERSION=1.45 \
+  containrrr/watchtower:1.7.1 \
+  backend
+EOF
 
   user_data_replace_on_change = true
 
@@ -143,7 +167,7 @@ resource "aws_instance" "pipelines" {
 set -e
 
 apt-get update -y
-apt-get install -y docker.io docker-compose-v2 awscli
+apt-get install -y docker.io docker-compose-v2 awscli cron
 systemctl enable docker
 systemctl start docker
 sleep 5
@@ -277,6 +301,30 @@ mkdir -p /root/.docker
 aws ecr get-login-password --region ${var.region} | docker login --username AWS --password-stdin ${aws_ecr_repository.pipelines.repository_url}
 
 docker compose up -d
+
+cat > /usr/local/bin/ecr-login.sh <<ECREOF
+#!/bin/bash
+aws ecr get-login-password --region ${var.region} | docker login --username AWS --password-stdin ${aws_ecr_repository.pipelines.repository_url}
+ECREOF
+chmod +x /usr/local/bin/ecr-login.sh
+
+systemctl enable cron
+systemctl start cron
+
+echo "0 */6 * * * root /usr/local/bin/ecr-login.sh" >> /etc/crontab
+
+docker run -d \
+  --name watchtower \
+  --restart always \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v /root/.docker:/root/.docker \
+  -e DOCKER_CONFIG=/root/.docker \
+  -e WATCHTOWER_POLL_INTERVAL=300 \
+  -e WATCHTOWER_CLEANUP=true \
+  -e WATCHTOWER_INCLUDE_STOPPED=false \
+  -e DOCKER_API_VERSION=1.45 \
+  containrrr/watchtower:1.7.1 \
+  ingestion_svc dagster_daemon dagster_webserver
 EOF
 
   user_data_replace_on_change = true
@@ -302,31 +350,49 @@ resource "aws_instance" "frontend" {
   vpc_security_group_ids = [aws_security_group.frontend.id]
   iam_instance_profile   = aws_iam_instance_profile.ec2_s3_profile.name
 
-  user_data = <<-EOF
-    #!/bin/bash
-    set -e
-    
-    # Instalar Docker
-    dnf install -y docker
-    systemctl enable docker
-    systemctl start docker
-    
-    # Esperar a que docker esté listo
-    sleep 5
-    
-    # Login a ECR
-    aws ecr get-login-password --region ${var.region} | docker login --username AWS --password-stdin ${aws_ecr_repository.frontend.repository_url}
-    
-    # Pull de la imagen
-    docker pull ${aws_ecr_repository.frontend.repository_url}:latest
-    
-    # Levantar el container
-    docker run -d \
-      --name frontend \
-      --restart always \
-      -p 8080:80 \
-      ${aws_ecr_repository.frontend.repository_url}:latest
-  EOF
+  user_data = <<EOF
+#!/bin/bash
+set -e
+
+dnf install -y docker awscli cronie
+systemctl enable docker
+systemctl start docker
+sleep 5
+
+aws ecr get-login-password --region ${var.region} | docker login --username AWS --password-stdin ${aws_ecr_repository.frontend.repository_url}
+
+docker pull ${aws_ecr_repository.frontend.repository_url}:latest
+
+docker run -d \
+  --name frontend \
+  --restart always \
+  -p 8080:80 \
+  ${aws_ecr_repository.frontend.repository_url}:latest
+
+cat > /usr/local/bin/ecr-login.sh <<ECREOF
+#!/bin/bash
+aws ecr get-login-password --region ${var.region} | docker login --username AWS --password-stdin ${aws_ecr_repository.frontend.repository_url}
+ECREOF
+chmod +x /usr/local/bin/ecr-login.sh
+
+systemctl enable crond
+systemctl start crond
+
+echo "0 */6 * * * root /usr/local/bin/ecr-login.sh" >> /etc/crontab
+
+docker run -d \
+  --name watchtower \
+  --restart always \
+  -v /var/run/docker.sock:/var/run/docker.sock \
+  -v /root/.docker:/root/.docker \
+  -e DOCKER_CONFIG=/root/.docker \
+  -e WATCHTOWER_POLL_INTERVAL=300 \
+  -e WATCHTOWER_CLEANUP=true \
+  -e WATCHTOWER_INCLUDE_STOPPED=false \
+  -e DOCKER_API_VERSION=1.44 \
+  containrrr/watchtower:1.7.1 \
+  frontend
+EOF
 
   user_data_replace_on_change = true
 

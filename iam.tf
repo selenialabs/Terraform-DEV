@@ -32,7 +32,9 @@ resource "aws_iam_role_policy" "ec2_s3_policy" {
           "s3:GetObject",
           "s3:PutObject",
           "s3:DeleteObject",
-          "s3:ListBucket"
+          "s3:ListBucket",
+          "s3:GetObjectTagging",
+          "s3:PutObjectTagging"
         ]
         Resource = [
           aws_s3_bucket.main.arn,

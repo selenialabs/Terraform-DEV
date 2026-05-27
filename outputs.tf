@@ -1,9 +1,4 @@
 # IPs públicas de las EC2
-output "backend_public_ip" {
-  description = "IP elástica del backend"
-  value       = aws_eip.backend.public_ip
-}
-
 output "frontend_public_ip" {
   description = "IP elástica del frontend"
   value       = aws_eip.frontend.public_ip
@@ -27,11 +22,6 @@ output "bucket_name" {
 }
 
 # Comandos SSH listos para copiar y pegar
-output "ssh_backend" {
-  description = "Comando SSH al backend"
-  value       = "ssh -i keys/backend-key.pem ubuntu@${aws_eip.backend.public_ip}"
-}
-
 output "ssh_frontend" {
   description = "Comando SSH al frontend"
   value       = "ssh -i keys/frontend-key.pem ec2-user@${aws_eip.frontend.public_ip}"

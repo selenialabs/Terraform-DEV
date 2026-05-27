@@ -4,11 +4,6 @@ output "backend_public_ip" {
   value       = aws_eip.backend.public_ip
 }
 
-output "pipelines_public_ip" {
-  description = "IP elástica de pipelines"
-  value       = aws_eip.pipelines.public_ip
-}
-
 output "frontend_public_ip" {
   description = "IP elástica del frontend"
   value       = aws_eip.frontend.public_ip
@@ -37,10 +32,6 @@ output "ssh_backend" {
   value       = "ssh -i keys/backend-key.pem ubuntu@${aws_eip.backend.public_ip}"
 }
 
-output "ssh_pipelines" {
-  description = "Comando SSH a pipelines"
-  value       = "ssh -i keys/pipelines-key.pem ubuntu@${aws_eip.pipelines.public_ip}"
-}
 output "ssh_frontend" {
   description = "Comando SSH al frontend"
   value       = "ssh -i keys/frontend-key.pem ec2-user@${aws_eip.frontend.public_ip}"

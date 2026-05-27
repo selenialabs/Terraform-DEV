@@ -209,21 +209,15 @@ resource "aws_s3_bucket_notification" "main_eventbridge" {
 }
 
 # ----------------------------------------------------------------------------
-# 8. EventBridge rules: una por prefix con filtro de sufijo .xlsx
+# 8. EventBridge rule: una sola para todos los .xlsx del bucket.
+#    El entrypoint.py del contenedor dispatchea por prefix internamente y
+#    descarta prefixes sin pipeline configurado. Una rule = una task por
+#    upload (en versiones anteriores eran 3 rules con array OR-ambiguo que
+#    matcheaba 3 veces cada upload).
 # ----------------------------------------------------------------------------
-locals {
-  pipelines_prefixes = {
-    ventas               = "ventas/"
-    productos            = "productos/"
-    ventas_por_productos = "ventas_por_productos/"
-  }
-}
-
 resource "aws_cloudwatch_event_rule" "pipeline_upload" {
-  for_each = local.pipelines_prefixes
-
-  name        = "${var.project_name}-${var.environment}-${each.key}-upload"
-  description = "Dispara task Fargate al uploadear .xlsx en s3://${aws_s3_bucket.main.bucket}/${each.value}"
+  name        = "${var.project_name}-${var.environment}-pipeline-upload"
+  description = "Dispara task Fargate al uploadear cualquier .xlsx en s3://${aws_s3_bucket.main.bucket}"
 
   event_pattern = jsonencode({
     source        = ["aws.s3"]
@@ -231,16 +225,13 @@ resource "aws_cloudwatch_event_rule" "pipeline_upload" {
     detail = {
       bucket = { name = [aws_s3_bucket.main.bucket] }
       object = {
-        key = [
-          { prefix = each.value },
-          { suffix = ".xlsx" },
-        ]
+        key = [{ suffix = ".xlsx" }]
       }
     }
   })
 
   tags = {
-    Name = "${var.project_name}-${var.environment}-${each.key}-upload-rule"
+    Name = "${var.project_name}-${var.environment}-pipeline-upload-rule"
   }
 }
 
@@ -296,9 +287,7 @@ resource "aws_iam_role_policy" "eventbridge_ecs" {
 #     extraído del evento como containerOverride.
 # ----------------------------------------------------------------------------
 resource "aws_cloudwatch_event_target" "pipeline_runtask" {
-  for_each = local.pipelines_prefixes
-
-  rule     = aws_cloudwatch_event_rule.pipeline_upload[each.key].name
+  rule     = aws_cloudwatch_event_rule.pipeline_upload.name
   arn      = aws_ecs_cluster.pipelines.arn
   role_arn = aws_iam_role.eventbridge_ecs.arn
 

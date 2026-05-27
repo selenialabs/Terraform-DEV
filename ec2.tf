@@ -1,12 +1,7 @@
 # ===== KEY PAIRS =====
-# Generamos las claves SSH automáticamente con Terraform
+# Generamos las claves SSH automÃ¡ticamente con Terraform
 
 resource "tls_private_key" "backend" {
-  algorithm = "RSA"
-  rsa_bits  = 4096
-}
-
-resource "tls_private_key" "pipelines" {
   algorithm = "RSA"
   rsa_bits  = 4096
 }
@@ -21,11 +16,6 @@ resource "aws_key_pair" "backend" {
   public_key = tls_private_key.backend.public_key_openssh
 }
 
-resource "aws_key_pair" "pipelines" {
-  key_name   = "${var.project_name}-${var.environment}-pipelines-key"
-  public_key = tls_private_key.pipelines.public_key_openssh
-}
-
 resource "aws_key_pair" "frontend" {
   key_name   = "${var.project_name}-${var.environment}-frontend-key"
   public_key = tls_private_key.frontend.public_key_openssh
@@ -38,12 +28,6 @@ resource "local_file" "backend_key" {
   file_permission = "0400"
 }
 
-resource "local_file" "pipelines_key" {
-  content         = tls_private_key.pipelines.private_key_pem
-  filename        = "${path.module}/keys/pipelines-key.pem"
-  file_permission = "0400"
-}
-
 resource "local_file" "frontend_key" {
   content         = tls_private_key.frontend.private_key_pem
   filename        = "${path.module}/keys/frontend-key.pem"
@@ -51,7 +35,7 @@ resource "local_file" "frontend_key" {
 }
 
 # ===== AMIs =====
-# Buscamos automáticamente las AMIs más recientes
+# Buscamos automÃ¡ticamente las AMIs mÃ¡s recientes
 
 # Ubuntu 22.04 (para backend y pipelines) - AMI fijada
 data "aws_ami" "ubuntu" {
@@ -153,194 +137,6 @@ EOF
   }
 }
 
-# Pipelines (Dagster)
-resource "aws_instance" "pipelines" {
-  ami                    = data.aws_ami.ubuntu.id
-  instance_type          = "t3.small"
-  key_name               = aws_key_pair.pipelines.key_name
-  subnet_id              = aws_subnet.public_1.id
-  vpc_security_group_ids = [aws_security_group.pipelines.id]
-  iam_instance_profile   = aws_iam_instance_profile.ec2_s3_profile.name
-
-  user_data = <<EOF
-#!/bin/bash
-set -e
-
-apt-get update -y
-apt-get install -y docker.io docker-compose-v2 awscli cron
-systemctl enable docker
-systemctl start docker
-sleep 5
-
-aws ecr get-login-password --region ${var.region} | docker login --username AWS --password-stdin ${aws_ecr_repository.pipelines.repository_url}
-
-docker pull ${aws_ecr_repository.pipelines.repository_url}:ingestion-latest
-docker pull ${aws_ecr_repository.pipelines.repository_url}:dagster-latest
-
-mkdir -p /opt/pipelines
-cd /opt/pipelines
-
-# Crear dagster.yaml custom para dev
-mkdir -p /opt/pipelines/dagster_home
-cat > /opt/pipelines/dagster_home/dagster.yaml <<DAGSTERYAMLEOF
-scheduler:
-  module: dagster.core.scheduler
-  class: DagsterDaemonScheduler
-run_coordinator:
-  module: dagster.core.run_coordinator
-  class: QueuedRunCoordinator
-  config:
-    max_concurrent_runs: 2
-storage:
-  postgres:
-    postgres_db:
-      hostname: dagster-poc-postgres
-      username:
-        env: DAGSTER_POSTGRES_USER
-      password:
-        env: DAGSTER_POSTGRES_PASSWORD
-      db_name:
-        env: DAGSTER_POSTGRES_DB
-      port: 5432
-run_launcher:
-  module: dagster_docker
-  class: DockerRunLauncher
-  config:
-    image: ${aws_ecr_repository.pipelines.repository_url}:ingestion-latest
-    network: pipelines_dagster_network
-    container_kwargs:
-      auto_remove: true
-      volumes:
-        - /var/run/docker.sock:/var/run/docker.sock
-        - /opt/pipelines/.env:/project/.env
-DAGSTERYAMLEOF
-
-cat > .env <<ENVEOF
-DAGSTER_POSTGRES_USER=dagster
-DAGSTER_POSTGRES_PASSWORD=dagster
-DAGSTER_POSTGRES_DB=dagster
-AWS_DB_HOST=${aws_db_instance.main.address}
-AWS_DB_USER=${var.db_username}
-AWS_DB_PASSWORD=${var.db_password}
-AWS_DB_NAME=selenia
-AWS_DB_PORT=5432
-DB_HOST=${aws_db_instance.main.address}
-DB_USER=${var.db_username}
-DB_PASSWORD=${var.db_password}
-DB_NAME=selenia
-DB_PORT=5432
-BUCKET_NAME=${aws_s3_bucket.main.bucket}
-AWS_REGION=${var.region}
-OPENAI_API_KEY=${var.openai_api_key}
-DEPLOY_ENV=dev
-ENVEOF
-
-cat > docker-compose.yml <<COMPOSEEOF
-services:
-  dagster_db:
-    image: postgres:16
-    container_name: dagster_db
-    hostname: dagster-poc-postgres
-    environment:
-      POSTGRES_USER: \$${DAGSTER_POSTGRES_USER}
-      POSTGRES_PASSWORD: \$${DAGSTER_POSTGRES_PASSWORD}
-      POSTGRES_DB: \$${DAGSTER_POSTGRES_DB}
-    networks:
-      - dagster_network
-
-  ingestion_svc:
-    image: ${aws_ecr_repository.pipelines.repository_url}:ingestion-latest
-    container_name: ingestion_svc
-    env_file:
-      - .env
-    restart: always
-    networks:
-      - dagster_network
-
-  dagster_daemon:
-    image: ${aws_ecr_repository.pipelines.repository_url}:dagster-latest
-    container_name: dagster_daemon
-    env_file:
-      - .env
-    entrypoint: ["dagster-daemon", "run"]
-    restart: always
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - /opt/pipelines/dagster_home/dagster.yaml:/opt/dagster/dagster_home/dagster.yaml
-    depends_on:
-      - dagster_db
-      - ingestion_svc
-    networks:
-      - dagster_network
-
-  dagster_webserver:
-    image: ${aws_ecr_repository.pipelines.repository_url}:dagster-latest
-    container_name: dagster_webserver
-    env_file:
-      - .env
-    entrypoint: ["dagster-webserver", "-h", "0.0.0.0", "-p", "3000", "-w", "workspace.yaml"]
-    ports:
-      - "3000:3000"
-    restart: always
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock
-      - /opt/pipelines/dagster_home/dagster.yaml:/opt/dagster/dagster_home/dagster.yaml
-    depends_on:
-      - dagster_db
-      - ingestion_svc
-    networks:
-      - dagster_network
-
-networks:
-  dagster_network:
-    driver: bridge
-COMPOSEEOF
-
-# Permitir que el docker daemon dentro del container acceda a ECR
-mkdir -p /root/.docker
-aws ecr get-login-password --region ${var.region} | docker login --username AWS --password-stdin ${aws_ecr_repository.pipelines.repository_url}
-
-docker compose up -d
-
-cat > /usr/local/bin/ecr-login.sh <<ECREOF
-#!/bin/bash
-aws ecr get-login-password --region ${var.region} | docker login --username AWS --password-stdin ${aws_ecr_repository.pipelines.repository_url}
-ECREOF
-chmod +x /usr/local/bin/ecr-login.sh
-
-systemctl enable cron
-systemctl start cron
-
-echo "0 */6 * * * root /usr/local/bin/ecr-login.sh" >> /etc/crontab
-
-docker run -d \
-  --name watchtower \
-  --restart always \
-  -v /var/run/docker.sock:/var/run/docker.sock \
-  -v /root/.docker:/root/.docker \
-  -e DOCKER_CONFIG=/root/.docker \
-  -e WATCHTOWER_POLL_INTERVAL=300 \
-  -e WATCHTOWER_CLEANUP=true \
-  -e WATCHTOWER_INCLUDE_STOPPED=false \
-  -e DOCKER_API_VERSION=1.45 \
-  containrrr/watchtower:1.7.1 \
-  ingestion_svc dagster_daemon dagster_webserver
-EOF
-
-  user_data_replace_on_change = true
-
-  root_block_device {
-    volume_size = 30
-    volume_type = "gp3"
-    encrypted   = true
-  }
-
-  tags = {
-    Name = "${var.project_name}-${var.environment}-pipelines"
-    Role = "pipelines"
-  }
-}
-
 # Frontend
 resource "aws_instance" "frontend" {
   ami                    = data.aws_ami.amazon_linux_2023.id
@@ -416,15 +212,6 @@ resource "aws_eip" "backend" {
 
   tags = {
     Name = "${var.project_name}-${var.environment}-backend-eip"
-  }
-}
-
-resource "aws_eip" "pipelines" {
-  instance = aws_instance.pipelines.id
-  domain   = "vpc"
-
-  tags = {
-    Name = "${var.project_name}-${var.environment}-pipelines-eip"
   }
 }
 

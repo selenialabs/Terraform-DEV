@@ -1,9 +1,3 @@
-# IPs públicas de las EC2
-output "frontend_public_ip" {
-  description = "IP elástica del frontend"
-  value       = aws_eip.frontend.public_ip
-}
-
 # Endpoint de la base de datos
 output "rds_endpoint" {
   description = "Endpoint de la RDS"
@@ -21,12 +15,6 @@ output "bucket_name" {
   value       = aws_s3_bucket.main.bucket
 }
 
-# Comandos SSH listos para copiar y pegar
-output "ssh_frontend" {
-  description = "Comando SSH al frontend"
-  value       = "ssh -i keys/frontend-key.pem ec2-user@${aws_eip.frontend.public_ip}"
-}
-
 # URLs de los repositorios ECR
 output "ecr_backend_url" {
   value       = aws_ecr_repository.backend.repository_url
@@ -40,5 +28,5 @@ output "ecr_pipelines_url" {
 
 output "ecr_frontend_url" {
   value       = aws_ecr_repository.frontend.repository_url
-  description = "URL del repo ECR del frontend"
+  description = "URL del repo ECR del frontend (sin uso desde Amplify; cleanup futuro)"
 }

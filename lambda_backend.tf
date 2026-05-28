@@ -130,6 +130,14 @@ resource "aws_lambda_function" "backend" {
     log_format = "Text"
     log_group  = "/aws/lambda/selenia-back-dev"
   }
+
+  lifecycle {
+    # La imagen del Lambda se actualiza por deploys del backend (CI o consola),
+    # fuera de Terraform. Si la trackeamos acá, pelearíamos con cada push del
+    # compañero y revertiríamos sin querer su deploy. Lo dejamos 100% fuera
+    # del scope de TF.
+    ignore_changes = [image_uri]
+  }
 }
 
 # ----------------------------------------------------------------------------
@@ -156,12 +164,12 @@ resource "aws_apigatewayv2_api" "backend" {
 }
 
 resource "aws_apigatewayv2_integration" "backend" {
-  api_id                 = aws_apigatewayv2_api.backend.id
-  integration_type       = "AWS_PROXY"
-  integration_method     = "POST"
+  api_id             = aws_apigatewayv2_api.backend.id
+  integration_type   = "AWS_PROXY"
+  integration_method = "POST"
   # HTTP API v2 con AWS_PROXY acepta el ARN plano del Lambda (no el invoke_arn
   # con el wrapper apigateway). Así fue creado a mano por el compañero.
-  integration_uri = aws_lambda_function.backend.arn
+  integration_uri        = aws_lambda_function.backend.arn
   payload_format_version = "2.0"
   connection_type        = "INTERNET"
   timeout_milliseconds   = 30000
